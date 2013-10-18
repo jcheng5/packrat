@@ -200,6 +200,23 @@ annotatePkgDesc <- function(pkgRecord, appDir, lib = libdir(appDir)) {
     InstallSource=pkgRecord$source))
 }
 
+# Takes a vector of package names, and returns a logical vector that indicates 
+# whether the package is installed AND was not installed by packrat.
+isPackageDirty <- function(pkgNames, lib.loc) {
+  # Can't use installed.packages(fields='InstallAgent') here because it uses 
+  # Meta/package.rds, not the DESCRIPTION file, and we only record this info in
+  # the DESCRIPTION file.
+  agents <- sapply(pkgNames, function(pkg) {
+    descFile <- file.path(lib.loc, pkg, 'DESCRIPTION')
+    if (!file.exists(descFile))
+      return('packrat') # kind of hacky. just want grepl to be TRUE
+    else
+      return(as.character(as.data.frame(read.dcf(descFile))$InstallAgent))
+  })
+  
+  return(!grepl('^packrat\\b', agents))
+}
+
 # Installs a single package from its record. Returns the method used to install
 # the package (built source, downloaded binary, etc.)
 installPkg <- function(pkgRecord, appDir, availablePkgs, repos, 
@@ -324,9 +341,10 @@ playInstallActions <- function(pkgRecords, actions, repos, appDir, lib) {
 }
 
 installPkgs <- function(appDir, repos, pkgRecords, lib) {
+  installed <- installed.packages(lib.loc = lib, priority = "NA")
   installedPkgs <- 
     getPackageRecords(
-      rownames(installed.packages(lib.loc = lib, priority = "NA")), 
+      rownames(installed), 
       recursive = FALSE, fatal = FALSE)
   actions <- diff(installedPkgs, pkgRecords)
   actions <- actions[!is.na(actions)]

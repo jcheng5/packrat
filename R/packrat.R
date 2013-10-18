@@ -60,7 +60,7 @@ bootstrap <- function(appDir = '.', sourcePackagePaths = character()) {
                sourcePackages=sourcePackages, lib.loc = NULL)
   
   # Use the lockfile to copy sources and install packages to the library
-  restore(appDir)
+  restore(appDir, overwriteDirty=TRUE)
   
   # Write the .Rprofile and .Renviron files
   packify(appDir)
@@ -69,7 +69,7 @@ bootstrap <- function(appDir = '.', sourcePackagePaths = character()) {
 }
 
 #' @export
-restore <- function(appDir = '.') {
+restore <- function(appDir = '.', overwriteDirty = FALSE) {
   appDir <- normalizePath(appDir, winslash='/')
   
   packages <- lockInfo(appDir)
@@ -86,6 +86,17 @@ restore <- function(appDir = '.') {
   libDir <- libdir(appDir)
   if (!file.exists(libDir)) {
     dir.create(libDir, recursive=TRUE)
+  }
+  
+  if (!isTRUE(overwriteDirty)) {
+    dirty <- isPackageDirty(pkgNames(installList), libDir)
+    dirtyPackages <- installList[dirty]
+    installList <- installList[!dirty]
+    prettyPrint(
+      dirtyPackages,
+      'The following packages are dirty and will not be overwritten:',
+      'If you would like to overwrite them, call restore again with\noverwriteDirty = TRUE.'
+    )
   }
   
   # Snapshot the sources for each package, then install them in turn from CRAN

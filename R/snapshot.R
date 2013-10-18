@@ -35,6 +35,9 @@ snapshotImpl <- function(appDir = '.', available = NULL, lib.loc = libdir(appDir
   diffs <- diff(lockPackages, appPackages)
   mustConfirm <- any(c('downgrade', 'remove', 'crossgrade') %in% diffs)
   
+  unchanged <- names(diffs)[is.na(diffs)]
+  dirtyPackageNames <- unchanged[isPackageDirty(unchanged, lib.loc)]
+  
   prettyPrint(
     searchPackages(appPackages, names(diffs)[!is.na(diffs) & diffs == 'add']),
     'Adding these packages to packrat:'
@@ -60,7 +63,10 @@ snapshotImpl <- function(appDir = '.', available = NULL, lib.loc = libdir(appDir
   )
   
   if (all(is.na(diffs))) {
-    message("Already up to date")
+    message("All packages are up to date.")
+    # TODO: Even in this case, we need to check if dirtyPackageNames isn't empty
+    # and if so, we need to download sources again and also mark the installed
+    # package binary as non-dirty using annotatePkgDesc.
     return(invisible())
   }
   
@@ -79,6 +85,11 @@ snapshotImpl <- function(appDir = '.', available = NULL, lib.loc = libdir(appDir
                   appPackages)
     cat('Snapshot written to', 
         normalizePath(file.path(appDir, "packrat.lock"), winslash = '/'), '\n')
+    
+    if (!is.null(lib.loc)) {
+      annotatePkgDesc(flattenPackageRecords(appPackages),
+                      appDir=appDir, lib=lib.loc)
+    }
   }
   
   return(invisible())
