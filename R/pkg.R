@@ -234,14 +234,22 @@ searchPackages <- function(packages, packageNames) {
 }
 
 # Returns a linear list of package records, sorted by name, with all dependency
-# information removed
-flattenPackageRecords <- function(packageRecords) {
+# information removed (or, optionally, reduced to names)
+flattenPackageRecords <- function(packageRecords, depInfo = FALSE, sourcePath = FALSE) {
   visited <- new.env(parent=emptyenv())
   visit <- function(pkgRecs) {
     for (rec in pkgRecs) {
+      if (isTRUE(depInfo)) {
+        rec$requires <- pkgNames(rec$depends)
+        if (length(rec$requires) == 0)
+          rec$requires <- NA_character_
+        else if (length(rec$requires) > 1)
+          rec$requires <- paste(rec$requires, collapse = ', ')
+      }
       visit(rec$depends)
-      rec['depends'] <- NULL
-      rec['source_path'] <- NULL
+      rec$depends <- NULL
+      if (!isTRUE(sourcePath))
+        rec$source_path <- NULL
       visited[[rec$name]] <- rec
     }
   }
