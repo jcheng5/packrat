@@ -18,7 +18,7 @@
 
 # Returns a package records for the given packages
 getPackageRecords <- function(pkgNames, available=NULL, sourcePackages=NULL, 
-                              recursive=TRUE, lib.loc=NULL, fatal=TRUE) {
+                              recursive=TRUE, lib.loc=NULL) {
   records <- lapply(pkgNames, function(pkgName) {
     if (!is.null(sourcePackages) &&
         pkgName %in% rownames(sourcePackages)) {
@@ -53,14 +53,23 @@ getPackageRecords <- function(pkgNames, available=NULL, sourcePackages=NULL,
             Version = pkg[["Version"]],
             Repository = "CRAN")
           db <- available
-        } else if (fatal) {
-          where <- ifelse(is.null(lib.loc), 'the current libpath', lib.loc)
-          stop('The package "', pkgName, '" is not installed in ', where)
         } else {
-          return(list(
-            name = pkgName,
-            version = NA,
-            source = NA
+          return(withRestarts({
+            where <- ifelse(is.null(lib.loc), 'the current libpath', lib.loc)
+            signalCondition(structure(
+              list(package = pkgName, lib.loc = lib.loc),
+              class = c("package-missing", "condition")
+            ))
+            stop('The package "', pkgName, '" is not installed in ', where)
+          }, nameWithoutPackage = function() {
+            return(list(
+              name = pkgName,
+              version = NA,
+              source = NA
+            ))
+          }, ignore = function() {
+            return(NULL)
+          }
           ))
         }
       } else {
@@ -80,7 +89,7 @@ getPackageRecords <- function(pkgNames, available=NULL, sourcePackages=NULL,
         )[[record$name]]
       }
       record$depends <- getPackageRecords(
-        deps, available, sourcePackages, TRUE, lib.loc=lib.loc, fatal=fatal)
+        deps, available, sourcePackages, TRUE, lib.loc=lib.loc)
     }
     return(record)
   })

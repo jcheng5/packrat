@@ -297,8 +297,16 @@ status <- function(appDir = '.', lib.loc = libdir(appDir), quiet = FALSE) {
   packratNames <- pkgNames(flattenPackageRecords(packratPackages))
   
   # Packages that are inferred from the code
-  allAppPackageNames <- pkgNames(flattenPackageRecords(getPackageRecords(
-    appDependencies(appDir), NULL, lib.loc = c(lib.loc, .libPaths()))))
+  missingPackageNames <- character(0)
+  withCallingHandlers({
+    pkgRecords <- getPackageRecords(
+      appDependencies(appDir), NULL, lib.loc = c(lib.loc, .libPaths()))
+  }, `package-missing` = function(cond) {
+    missingPackageNames <<- c(missingPackageNames, cond$package)
+    invokeRestart('ignore')
+  })
+  allAppPackageNames <- pkgNames(flattenPackageRecords(pkgRecords))
+  missingPackageNames <- sort(setdiff(unique(missingPackageNames), packratNames))
   
   # (Non-recursive) packages from the library--i.e., installed packages
   libPackages <- getPackageRecords(
@@ -374,6 +382,14 @@ status <- function(appDir = '.', lib.loc = libdir(appDir), quiet = FALSE) {
       "library",
       "packrat"
     )
+
+    if (length(missingPackageNames) > 0) {
+      cat("\nThe following packages are referenced in your code, but are not present",
+          "\nin your library nor in packrat:\n")
+      cat(paste("    ", missingPackageNames, sep = '', collapse = '\n'))
+      cat("\nYou will need to install these packages manually, then use",
+          "\npackrat::snapshot() to record these packages in packrat.\n")
+    }
   }
   
   if (!any(isChanged) && !any(isDirty) && !any(isOrphan)) {
@@ -484,6 +500,22 @@ prettyPrintPair <- function(packagesFrom, packagesTo, header, footer = NULL,
   }
 }
 
+prettyPrintNames <- function(packageNames, header, footer = NULL) {
+  if (length(packageNames) > 0) {
+    cat('\n')
+    if (!is.null(header)) {
+      cat(paste(header, collapse=''))
+      cat('\n')
+    }
+    cat(paste("    ", packageNames, sep = '', collapse = '\n'))
+    cat('\n')
+    if (!is.null(footer)) {
+      cat(paste(footer, collapse=''))
+    }
+    cat('\n')
+  }
+}
+
 #' Remove unused packages
 #' 
 #' Remove unused packages from the given library.
@@ -515,10 +547,27 @@ clean <- function(appDir = ".", lib.loc = libdir(appDir),
   appDir <- normalizePath(appDir, winslash='/', mustWork=TRUE)
 
   rootDeps <- appDependencies(appDir)
-  packagesInUse <- getPackageRecords(rootDeps, available=NULL,
-                                     sourcePackages=NULL,
-                                     recursive=TRUE,
-                                     lib.loc=c(lib.loc, .libPaths()))
+  
+  missingPackageNames <- character(0)
+  packagesInUse <- withCallingHandlers(
+    getPackageRecords(rootDeps, available=NULL,
+                      sourcePackages=NULL,
+                      recursive=TRUE,
+                      lib.loc=c(lib.loc, .libPaths())),
+    `package-missing` = function(cond) {
+      missingPackageNames <<- c(missingPackageNames, cond$package)
+      invokeRestart('ignore')
+    }
+  )
+  missingPackageNames <- sort(unique(missingPackageNames))
+    
+  prettyPrintNames(
+    missingPackageNames,
+    c("Can't detect orphaned packages because these package(s) are not installed:")
+  )
+  if (length(missingPackageNames) > 0) {
+    return(invisible())
+  }
   
   installedPkgNames <- row.names(installed.packages(
     lib.loc=lib.loc, priority=c('NA', 'recommended'), noCache=TRUE))
